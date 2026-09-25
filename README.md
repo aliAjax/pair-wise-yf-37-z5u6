@@ -26,6 +26,13 @@ python3 app.py --db ./data.db --port 8303
 
 - `case`：病例和调查状态；`contact`：接触者随访。
 
+## 解除观察判定
+
+- 接触者可关联多条病例：创建时传`case_ids`（兼容单条`case_id`），随访中可用`link_case`动作追加关联并顺延`exposure_end`。
+- 解除观察按全部关联病例判定：最近一次暴露结束（`exposure_end`，缺省等同`exposure_start`）满14天，且关联病例均为`recovered`或`closed`，且本人未报告症状（`report_symptoms`动作可登记症状和`symptom_onset`）。
+- `GET /api/contacts`返回的每条接触者带`release`字段：是否可解除、阻塞原因`reasons`、最早可解除时间`earliest_release_at`；可用`?as_of=YYYY-MM-DD`指定判定日期。判定实时计算，关联病例转归变化会立即反映到列表结果。
+- `complete_followup`仅在满足条件时执行（可传`as_of`），确认后记录`released_by`/`released_at`并保留`case_ids`等联系史。
+
 ## 主要接口
 
 - `GET /health`：健康检查。

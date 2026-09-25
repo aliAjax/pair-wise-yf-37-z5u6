@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from .audit import AuditTrail
 from .domain import ConflictError, NotFoundError
-from .rules import RuleEngine
+from .rules import RuleEngine, contact_case_ids, evaluate_release
 
 
 class DomainService:
@@ -64,10 +64,33 @@ class DomainService:
             raise NotFoundError("entity not found: " + entity_id)
         return entity
 
-    def list(self, kind=None, status=None):
+    def list(self, kind=None, status=None, as_of=None):
         if kind:
             kind = self.rules.normalize_kind(kind)
-        return self.repository.list_entities(kind=kind, status=status)
+        entities = self.repository.list_entities(kind=kind, status=status)
+        if kind == "contact":
+            return [self._with_release(entity, as_of) for entity in entities]
+        return entities
+
+    def _with_release(self, entity, as_of):
+        enriched = dict(entity)
+        data = entity["data"]
+        if entity["status"] == "completed":
+            enriched["release"] = {
+                "releasable": True,
+                "reasons": [],
+                "released_by": data.get("released_by"),
+                "released_at": data.get("released_at"),
+                "case_ids": contact_case_ids(data),
+            }
+            return enriched
+        cases = []
+        for cid in contact_case_ids(data):
+            case = self.repository.get_entity(cid)
+            if case:
+                cases.append(case)
+        enriched["release"] = evaluate_release(entity, cases, as_of=as_of)
+        return enriched
 
     def audit_log(self, entity_id=None):
         return self.repository.list_audit(entity_id=entity_id)
