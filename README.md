@@ -26,6 +26,24 @@ python3 app.py --db ./data.db --port 8303
 
 - `case`：病例和调查状态；`contact`：接触者随访。
 
+## 接触者解除观察规则
+
+接触者可同时关联多个病例（创建时用 `case_ids`，旧的单个 `case_id` 仍兼容；数据中保留每条关联的 `links` 暴露窗口与 `exposure_start/exposure_end` 总窗口）。满足以下**全部**条件，工作人员才能执行 `complete_followup` 解除观察：
+
+1. 最近一次暴露结束起满 14 天观察期；
+2. 关联的**全部**病例均已 `recovered` 或 `closed`；
+3. 接触者本人未通过 `report_symptoms` 报告症状。
+
+接触者的列表和详情会附带 `release` 计算结果：`eligible`、`blockers`（逐项阻塞原因）、`pending_cases`、`window_ends_at` 和 `earliest_release_date`（最早可解除时间；被待查病例或症状阻塞时为 `null`）。解除校验失败时动作返回 409 并在错误信息中写明原因和最早可解除时间。
+
+相关动作：
+
+- `link_case`：追加关联病例（可携带该病例的暴露窗口）；在 `identified`/`following`/`completed` 状态均可执行。已解除的接触者若因此不再满足条件，会自动下调回 `following`。
+- `report_symptoms`：报告本人症状（必填 `symptoms`，可选 `symptom_onset`），状态进入/回到 `following`，症状未排查前不能解除。
+- `case.reopen`：病例转归回退（已康复或关闭 → 调查中，需 `reason`）。所有因此丧失解除前提的已解除接触者自动下调回 `following`，写入 `resume_followup` 审计。
+
+解除与下调都不会删除联系史：`links`/`case_ids` 始终保留，既往解除记录归档在 `release_history`，下调原因记录在 `release_revoked`。待办结果随病例转归联动，病例再次康复关闭后可重新确认解除。`complete_followup` 的数据可带 `as_of` 指定评估日期（默认当天）。
+
 ## 主要接口
 
 - `GET /health`：健康检查。
